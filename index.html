@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Капча с нечитаемым текстом</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .captcha-container {
+            background-color: rgba(25, 25, 35, 0.9);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            max-width: 800px;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .captcha-title {
+            text-align: center;
+            margin-bottom: 25px;
+            color: #ff6b6b;
+            font-size: 2rem;
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+        
+        .instructions {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #a0a0c0;
+            line-height: 1.5;
+        }
+        
+        .captcha-image-container {
+            position: relative;
+            width: 100%;
+            height: 200px;
+            margin: 25px 0;
+            border: 2px solid #444;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #111;
+        }
+        
+        #captchaCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .input-group {
+            margin: 20px 0;
+        }
+        
+        input {
+            width: 100%;
+            padding: 15px;
+            background: rgba(40, 40, 60, 0.7);
+            border: 1px solid #555;
+            border-radius: 8px;
+            color: white;
+            font-size: 18px;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #ff6b6b;
+            box-shadow: 0 0 10px rgba(255, 107, 107, 0.3);
+        }
+        
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(45deg, #ff6b6b, #ff8e53);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 7px 15px rgba(255, 107, 107, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            display: none;
+        }
+        
+        .success {
+            background: rgba(46, 204, 113, 0.2);
+            color: #2ecc71;
+            border: 1px solid #2ecc71;
+            display: block;
+        }
+        
+        .error {
+            background: rgba(231, 76, 60, 0.2);
+            color: #e74c3c;
+            border: 1px solid #e74c3c;
+            display: block;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .controls button {
+            flex: 1;
+        }
+        
+        .refresh-btn {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+        }
+        
+        .audio-btn {
+            background: linear-gradient(45deg, #a166ab, #5073b8);
+        }
+        
+        .hint {
+            text-align: center;
+            margin-top: 15px;
+            color: #777;
+            font-size: 14px;
+        }
+        
+        .timer {
+            text-align: center;
+            margin: 15px 0;
+            font-size: 18px;
+            color: #ff6b6b;
+        }
+        
+        .attempts {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 16px;
+            color: #a0a0c0;
+        }
+        
+        .noise-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.9;
+        }
+        
+        .difficulty-indicator {
+            text-align: center;
+            margin: 10px 0;
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+        
+        .warning {
+            text-align: center;
+            margin: 10px 0;
+            color: #ff6b6b;
+            font-weight: bold;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="captcha-container">
+        <h1 class="captcha-title">КАПЧА С НЕЧИТАЕМЫМ ТЕКСТОМ</h1>
+        <p class="instructions">Введите 8 символов, которые вы видите на изображении. У вас есть 2 попытки и 120 секунд.</p>
+        <div class="difficulty-indicator">Уровень сложности: НЕВОЗМОЖНЫЙ</div>
+        <div class="warning">ВНИМАНИЕ: Текст практически нечитаем. Возможно, потребуется несколько минут для распознавания!</div>
+        
+        <div class="timer">Осталось времени: <span id="timeLeft">120</span> сек.</div>
+        <div class="attempts">Осталось попыток: <span id="attemptsLeft">2</span></div>
+        
+        <div class="captcha-image-container">
+            <canvas id="captchaCanvas"></canvas>
+            <div class="noise-overlay" id="noiseOverlay"></div>
+        </div>
+        
+        <div class="input-group">
+            <input type="text" id="captchaInput" placeholder="Введите 8 символов с изображения" maxlength="8">
+        </div>
+        
+        <button id="submitBtn">Проверить капчу</button>
+        
+        <div class="controls">
+            <button id="refreshBtn" class="refresh-btn">Обновить капчу</button>
+            <button id="audioBtn" class="audio-btn">Озвучить код</button>
+        </div>
+        
+        <div class="result" id="result"></div>
+        <p class="hint">Если не можете разобрать текст, используйте кнопку озвучивания или обновите капчу.</p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.getElementById('captchaCanvas');
+            const ctx = canvas.getContext('2d');
+            const captchaInput = document.getElementById('captchaInput');
+            const submitBtn = document.getElementById('submitBtn');
+            const refreshBtn = document.getElementById('refreshBtn');
+            const audioBtn = document.getElementById('audioBtn');
+            const resultDiv = document.getElementById('result');
+            const timeLeftSpan = document.getElementById('timeLeft');
+            const attemptsLeftSpan = document.getElementById('attemptsLeft');
+            const noiseOverlay = document.getElementById('noiseOverlay');
+            
+            let captchaText = '';
+            let attemptsLeft = 2;
+            let timeLeft = 120;
+            let timerInterval;
+            
+            // Установка размеров canvas
+            function setCanvasSize() {
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+            }
+            
+            // Генерация случайной строки из 8 символов
+            function generateCaptchaText() {
+                const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                let result = '';
+                for (let i = 0; i < 8; i++) {
+                    result += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                return result;
+            }
+            
+            // Создание экстремальных искажений на canvas
+            function drawCaptcha() {
+                setCanvasSize();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Фон с максимальным шумом
+                drawNoiseBackground();
+                
+                // Рисуем текст с экстремальными искажениями
+                ctx.save();
+                
+                // Центрируем текст
+                const textWidth = 8 * 60;
+                const startX = (canvas.width - textWidth) / 2;
+                const startY = canvas.height / 2;
+                
+                for (let i = 0; i < captchaText.length; i++) {
+                    ctx.save();
+                    
+                    // Позиция символа
+                    const x = startX + i * 60;
+                    const y = startY;
+                    
+                    // Сильное вращение
+                    const rotation = (Math.random() - 0.5) * 0.5;
+                    ctx.translate(x, y);
+                    ctx.rotate(rotation);
+                    
+                    // Случайное масштабирование
+                    const scale = 0.7 + Math.random() * 0.6;
+                    ctx.scale(scale, scale);
+                    
+                    // Очень низкая контрастность - почти сливается с фоном
+                    const brightness = 40 + Math.random() * 40;
+                    ctx.fillStyle = `hsl(0, 0%, ${brightness}%)`;
+                    
+                    // Случайный шрифт и размер
+                    const fontSize = 25 + Math.random() * 10;
+                    const fontFamily = Math.random() > 0.5 ? 'Arial' : 'Courier New';
+                    ctx.font = `bold ${fontSize}px ${fontFamily}`;
+                    
+                    // Рисуем символ
+                    ctx.fillText(captchaText[i], 0, 0);
+                    
+                    // Добавляем дополнительные искажения для символа
+                    distortCharacter(i, x, y);
+                    
+                    ctx.restore();
+                }
+                
+                ctx.restore();
+                
+                // Добавляем экстремальный шум поверх текста
+                addExtremeNoise();
+                
+                // Добавляем линии-помехи
+                addInterferenceLines();
+                
+                // Добавляем эффект размытия
+                addBlurEffect();
+                
+                // Добавляем дополнительный слой шума
+                addSecondaryNoise();
+            }
+            
+            // Фон с максимальным шумом
+            function drawNoiseBackground() {
+                const imageData = ctx.createImageData(canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    // Высококонтрастный шум
+                    const value = Math.random() > 0.5 ? 200 : 30;
+                    data[i] = value;     // R
+                    data[i+1] = value;   // G
+                    data[i+2] = value;   // B
+                    data[i+3] = 255;     // A
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+                
+                // Темный градиент поверх шума
+                const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+                gradient.addColorStop(0, 'rgba(20, 20, 30, 0.8)');
+                gradient.addColorStop(1, 'rgba(5, 5, 15, 0.9)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            // Дополнительные искажения для символов
+            function distortCharacter(index, x, y) {
+                ctx.save();
+                ctx.translate(x, y);
+                
+                // Множественные тени с разными смещениями
+                for (let j = 0; j < 8; j++) {
+                    const offsetX = (Math.random() - 0.5) * 12;
+                    const offsetY = (Math.random() - 0.5) * 12;
+                    
+                    ctx.save();
+                    ctx.translate(offsetX, offsetY);
+                    
+                    // Очень светлые тени, почти невидимые
+                    ctx.fillStyle = `rgba(255, 255, 255, 0.03)`;
+                    ctx.fillText(captchaText[index], 0, 0);
+                    
+                    ctx.restore();
+                }
+                
+                ctx.restore();
+            }
+            
+            // Добавление экстремального шума
+            function addExtremeNoise() {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                // Добавляем случайные пиксели шума
+                for (let i = 0; i < data.length; i += 4) {
+                    if (Math.random() > 0.5) {
+                        // Высококонтрастный шум
+                        const noise = Math.random() > 0.5 ? 255 : 0;
+                        data[i] = noise;     // R
+                        data[i+1] = noise;   // G
+                        data[i+2] = noise;   // B
+                    }
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+                
+                // Добавляем крупные помехи
+                for (let i = 0; i < 80; i++) {
+                    const x = Math.random() * canvas.width;
+                    const y = Math.random() * canvas.height;
+                    const radius = Math.random() * 15 + 5;
+                    
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 0.4})`;
+                    ctx.fill();
+                }
+            }
+            
+            // Добавление линий-помех
+            function addInterferenceLines() {
+                // Горизонтальные линии
+                for (let i = 0; i < 15; i++) {
+                    const y = Math.random() * canvas.height;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${Math.random() * 0.4})`;
+                    ctx.lineWidth = Math.random() * 3 + 1;
+                    ctx.stroke();
+                }
+                
+                // Вертикальные линии
+                for (let i = 0; i < 10; i++) {
+                    const x = Math.random() * canvas.width;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, canvas.height);
+                    ctx.strokeStyle = `rgba(255, 0, 0, ${Math.random() * 0.3})`;
+                    ctx.lineWidth = Math.random() * 3 + 1;
+                    ctx.stroke();
+                }
+                
+                // Диагональные линии
+                for (let i = 0; i < 20; i++) {
+                    const startX = Math.random() * canvas.width;
+                    const startY = Math.random() * canvas.height;
+                    const endX = startX + (Math.random() - 0.5) * 300;
+                    const endY = startY + (Math.random() - 0.5) * 300;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = `rgba(0, 255, 255, ${Math.random() * 0.3})`;
+                    ctx.lineWidth = Math.random() * 2 + 0.5;
+                    ctx.stroke();
+                }
+            }
+            
+            // Добавление эффекта размытия
+            function addBlurEffect() {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                const tempData = new Uint8ClampedArray(data);
+                
+                // Сильный фильтр размытия
+                for (let y = 2; y < canvas.height - 2; y++) {
+                    for (let x = 2; x < canvas.width - 2; x++) {
+                        const idx = (y * canvas.width + x) * 4;
+                        
+                        if (Math.random() > 0.3) {
+                            // Берем среднее значение соседних пикселей
+                            for (let c = 0; c < 3; c++) {
+                                let sum = 0;
+                                let count = 0;
+                                for (let dy = -2; dy <= 2; dy++) {
+                                    for (let dx = -2; dx <= 2; dx++) {
+                                        const nIdx = ((y + dy) * canvas.width + (x + dx)) * 4;
+                                        sum += tempData[nIdx + c];
+                                        count++;
+                                    }
+                                }
+                                data[idx + c] = sum / count;
+                            }
+                        }
+                    }
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+            }
+            
+            // Добавление вторичного шума
+            function addSecondaryNoise() {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                // Добавляем мелкие точки шума
+                for (let i = 0; i < data.length; i += 4) {
+                    if (Math.random() > 0.7) {
+                        const noise = Math.random() > 0.5 ? 100 : 150;
+                        data[i] = Math.min(255, data[i] + noise);     // R
+                        data[i+1] = Math.min(255, data[i+1] + noise); // G
+                        data[i+2] = Math.min(255, data[i+2] + noise); // B
+                    }
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+            }
+            
+            // Создание шумового наложения с помощью CSS
+            function createNoiseOverlay() {
+                noiseOverlay.innerHTML = '';
+                
+                // Создаем SVG-фильтр для шума
+                const svgNS = "http://www.w3.org/2000/svg";
+                const svg = document.createElementNS(svgNS, "svg");
+                svg.setAttribute("width", "100%");
+                svg.setAttribute("height", "100%");
+                
+                const filter = document.createElementNS(svgNS, "filter");
+                filter.setAttribute("id", "turbulence");
+                
+                const turbulence = document.createElementNS(svgNS, "feTurbulence");
+                turbulence.setAttribute("type", "fractalNoise");
+                turbulence.setAttribute("baseFrequency", "0.1");
+                turbulence.setAttribute("numOctaves", "5");
+                turbulence.setAttribute("result", "turbulence");
+                
+                const displacement = document.createElementNS(svgNS, "feDisplacementMap");
+                displacement.setAttribute("in2", "turbulence");
+                displacement.setAttribute("in", "SourceGraphic");
+                displacement.setAttribute("scale", "25");
+                displacement.setAttribute("xChannelSelector", "R");
+                displacement.setAttribute("yChannelSelector", "G");
+                
+                filter.appendChild(turbulence);
+                filter.appendChild(displacement);
+                svg.appendChild(filter);
+                
+                const rect = document.createElementNS(svgNS, "rect");
+                rect.setAttribute("width", "100%");
+                rect.setAttribute("height", "100%");
+                rect.setAttribute("filter", "url(#turbulence)");
+                rect.setAttribute("opacity", "0.4");
+                
+                svg.appendChild(rect);
+                noiseOverlay.appendChild(svg);
+            }
+            
+            // Озвучивание капчи
+            function playAudioCaptcha() {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.type = 'sine';
+                
+                let time = audioContext.currentTime;
+                
+                for (let i = 0; i < captchaText.length; i++) {
+                    const char = captchaText[i];
+                    
+                    let frequency;
+                    if (/[A-Z]/.test(char)) {
+                        frequency = 300 + (char.charCodeAt(0) - 65) * 30;
+                    } else {
+                        frequency = 700 + parseInt(char) * 50;
+                    }
+                    
+                    oscillator.frequency.setValueAtTime(frequency, time);
+                    gainNode.gain.setValueAtTime(0.5, time);
+                    
+                    time += 0.4;
+                    gainNode.gain.setValueAtTime(0, time);
+                    time += 0.1;
+                }
+                
+                oscillator.start();
+                oscillator.stop(time);
+            }
+            
+            // Запуск таймера
+            function startTimer() {
+                clearInterval(timerInterval);
+                timeLeft = 120;
+                timeLeftSpan.textContent = timeLeft;
+                
+                timerInterval = setInterval(() => {
+                    timeLeft--;
+                    timeLeftSpan.textContent = timeLeft;
+                    
+                    if (timeLeft <= 0) {
+                        clearInterval(timerInterval);
+                        showResult('Время вышло! Капча обновлена.', false);
+                        generateNewCaptcha();
+                    }
+                }, 1000);
+            }
+            
+            // Показать результат
+            function showResult(message, isSuccess) {
+                resultDiv.textContent = message;
+                resultDiv.className = isSuccess ? 'result success' : 'result error';
+            }
+            
+            // Генерация новой капчи
+            function generateNewCaptcha() {
+                captchaText = generateCaptchaText();
+                drawCaptcha();
+                createNoiseOverlay();
+                captchaInput.value = '';
+                startTimer();
+                submitBtn.disabled = false;
+            }
+            
+            // Проверка капчи
+            function validateCaptcha() {
+                const userInput = captchaInput.value.toUpperCase();
+                
+                if (userInput === captchaText) {
+                    showResult('Невероятно! Вы смогли разобрать текст!', true);
+                    clearInterval(timerInterval);
+                    submitBtn.disabled = true;
+                } else {
+                    attemptsLeft--;
+                    attemptsLeftSpan.textContent = attemptsLeft;
+                    
+                    if (attemptsLeft <= 0) {
+                        showResult('Попытки исчерпаны! Капча обновлена.', false);
+                        attemptsLeft = 2;
+                        attemptsLeftSpan.textContent = attemptsLeft;
+                        generateNewCaptcha();
+                    } else {
+                        showResult(`Неверно! Осталось попыток: ${attemptsLeft}`, false);
+                        captchaInput.value = '';
+                        captchaInput.focus();
+                    }
+                }
+            }
+            
+            // Инициализация
+            function init() {
+                setCanvasSize();
+                generateNewCaptcha();
+                
+                // Обработчики событий
+                submitBtn.addEventListener('click', validateCaptcha);
+                refreshBtn.addEventListener('click', generateNewCaptcha);
+                audioBtn.addEventListener('click', playAudioCaptcha);
+                
+                // Enter для отправки
+                captchaInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        validateCaptcha();
+                    }
+                });
+                
+                // Изменение размера canvas при изменении размера окна
+                window.addEventListener('resize', function() {
+                    setCanvasSize();
+                    drawCaptcha();
+                });
+            }
+            
+            // Запуск
+            init();
+        });
+    </script>
+</body>
+</html>
